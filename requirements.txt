@@ -2,20 +2,22 @@
 numpy>=1.24.0
 sounddevice>=0.4.6
 PyQt6>=6.5.0
+PyQt6-WebEngine>=6.5.0      # web-rendered glass overlay (waveform)
 pynput>=1.7.6
 pyyaml>=6.0
 pyperclip>=1.8.0
 pystray>=0.19.5
 pillow>=10.0.0
 
-# Text formatting (local LLM)
-# Install with CUDA support:
-# pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121
-llama-cpp-python>=0.2.0
-
-
-# Parakeet (ONNX)
+# Speech-to-text: Parakeet-TDT v2 (ONNX). [gpu] pulls onnxruntime-gpu; on a
+# CPU-only machine you can install plain `onnx-asr[hub]` instead.
 onnx-asr[gpu,hub]>=0.10.2
 
-# Packaging (for building .exe)
+# Packaging (optional — only needed to build a standalone .exe)
 pyinstaller>=6.0.0
+
+# --- Optional: local AI text formatting (Settings > Formatting) ------------
+# Disabled by default and NOT required to run the app. Installing it may
+# compile from source, so it's left out of the core install. To enable:
+#   pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121
+# llama-cpp-python>=0.2.0

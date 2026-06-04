@@ -33,6 +33,17 @@ class HotkeyListener:
         self._active = False
         self._listener: Optional[keyboard.Listener] = None
 
+    # Modifier/special keys we log for diagnostic purposes. Character keys
+    # (letters, numbers, symbols) are NEVER logged — we don't want this listener
+    # to behave like a keylogger.
+    _LOGGABLE_KEYS = frozenset({
+        keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r,
+        keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r,
+        keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r,
+        keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r,
+        keyboard.Key.esc,
+    })
+
     def _on_press(self, key):
         """Handle key press events."""
         try:
@@ -50,16 +61,25 @@ class HotkeyListener:
                     logger.debug("Escape pressed - cancelling")
                     self.on_cancel()
 
+            # Diagnostic logging — modifier/Esc keys only. Character keys are
+            # silently ignored so the log never contains typed text.
+            if key in self._LOGGABLE_KEYS:
+                logger.info(
+                    "modifier press: %r (ctrl=%s win=%s active=%s)",
+                    key, self.ctrl_pressed, self.win_pressed, self._active,
+                )
+
             # Check if Ctrl+Win combo is pressed
             if self.ctrl_pressed and self.win_pressed and not self._active:
                 self._active = True
-                logger.debug("Ctrl+Win activated")
+                logger.info("Ctrl+Win activated")
                 if self.on_activate:
                     self.on_activate()
 
-        except AttributeError:
-            # Handle key.char if key doesn't have the expected attributes
-            pass
+        except Exception:
+            # Never let a callback exception kill the listener thread —
+            # pynput silently stops the listener on unhandled exceptions.
+            logger.exception("Error in hotkey on_press handler")
 
     def _on_release(self, key):
         """Handle key release events."""
@@ -75,12 +95,12 @@ class HotkeyListener:
             # Check if Ctrl+Win combo is released
             if self._active and not (self.ctrl_pressed and self.win_pressed):
                 self._active = False
-                logger.debug("Ctrl+Win deactivated")
+                logger.info("Ctrl+Win deactivated")
                 if self.on_deactivate:
                     self.on_deactivate()
 
-        except AttributeError:
-            pass
+        except Exception:
+            logger.exception("Error in hotkey on_release handler")
 
     def start(self):
         """Start listening for hotkeys."""

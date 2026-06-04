@@ -62,6 +62,10 @@ class MedASRApp:
         self.state = AppState.IDLE
         self._lock = threading.Lock()
 
+        # Enable OpenGL context sharing for QtWebEngine (must precede QApplication)
+        from PyQt6.QtCore import Qt
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+
         # Initialize Qt application
         self.qt_app = QApplication(sys.argv)
 

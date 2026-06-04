@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* Generous padding = transparent margin so the drop shadow fades to nothing
+     BEFORE it reaches the window edge. Otherwise the soft shadow gets clipped
+     into a hard rectangle ("the squared box"). */
+  .stage {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    box-sizing: border-box;
+  }
+  /* Frosted cream glass pill. CSS border-radius => perfect anti-aliased corners. */
+  .glass {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 999px;                 /* full capsule */
+    background:
+      linear-gradient(180deg, rgba(249, 243, 230, 0.88), rgba(238, 228, 206, 0.92));
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    box-shadow:
+      0 6px 16px rgba(40, 33, 20, 0.28),          /* tight, fully-contained shadow */
+      0 1px 0 rgba(255, 255, 255, 0.85) inset,    /* crisp top edge */
+      0 -12px 24px rgba(150, 120, 70, 0.10) inset; /* subtle warm bottom vignette */
+    overflow: hidden;
+  }
+  /* Specular sheen across the top — sells the "glass" look. */
+  .glass::before {
+    content: "";
+    position: absolute;
+    left: 5%;
+    right: 5%;
+    top: 1px;
+    height: 46%;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0));
+    pointer-events: none;
+  }
+  /* Wave fills the pill; nudged so it sits on the optical midline. */
+  #wave {
+    position: absolute;
+    inset: 0;
+    transform: translateY(7px);
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="glass"><div id="wave"></div></div>
+  </div>
+
+  <script src="siriwave.umd.min.js"></script>
+  <script>
+    const PALETTES = {
+      recording: [
+        { color: "56, 189, 248", supportLine: true }, // sky
+        { color: "59, 130, 246" },                     // blue
+        { color: "99, 102, 241" },                     // indigo
+        { color: "139, 92, 246" },                     // violet
+      ],
+      processing: [
+        { color: "245, 158, 11", supportLine: true },  // amber
+        { color: "249, 115, 22" },                     // orange
+        { color: "234, 88, 12" },                      // deep orange
+      ],
+    };
+
+    let sw = null;
+
+    function build(stateName) {
+      const host = document.getElementById("wave");
+      try { if (sw) sw.stop(); } catch (e) {}
+      host.innerHTML = "";
+      sw = new SiriWave({
+        container: host,
+        style: "ios9",
+        cover: true,
+        autostart: true,
+        amplitude: 0.6,
+        speed: 0.20,
+        curveDefinition: PALETTES[stateName] || PALETTES.recording,
+      });
+    }
+
+    // Called from Python with a 0..1 audio level. Bigger, punchier wave.
+    window.setLevel = function (x) {
+      if (!sw) return;
+      const v = Math.max(0, Math.min(1, x));
+      sw.setAmplitude(0.35 + v * 3.6);
+    };
+
+    // Called from Python: "recording" | "processing".
+    window.setState = function (s) {
+      build(s);
+    };
+
+    build("recording");
+  </script>
+</body>
+</html>

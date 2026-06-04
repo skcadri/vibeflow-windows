@@ -1,25 +1,41 @@
-"""Floating bubble UI window."""
+"""Floating bubble UI window — web-rendered glassmorphic 'liquid glass' overlay.
 
+The overlay is a transparent QWebEngineView rendering ``assets/overlay.html``
+(a CSS glass pill + a siriwave voice waveform). Rendering in the web layer gives
+true anti-aliased rounded corners and a fluid, Apple-style waveform that plain
+Qt 2D painting can't match. The public API (set_state / update_audio /
+position_bottom_center) is unchanged so app.py needs no changes.
+"""
+
+import os
 import logging
+import numpy as np
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QApplication
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
-from PyQt6.QtGui import QPainter, QColor, QPainterPath, QBrush
-
-from .waveform import WaveformWidget
+from PyQt6.QtCore import Qt, QUrl, pyqtSignal
+from PyQt6.QtGui import QColor
+from PyQt6.QtWebEngineWidgets import QWebEngineView
 
 logger = logging.getLogger(__name__)
 
+_OVERLAY_HTML = os.path.join(os.path.dirname(__file__), "assets", "overlay.html")
+
 
 class FloatingBubble(QWidget):
-    """Floating UI bubble with waveform visualization."""
+    """Floating glass overlay with a web-rendered siriwave waveform."""
 
-    # Signals for thread-safe updates
+    # Signals for thread-safe updates (audio arrives on a background thread).
     state_changed_signal = pyqtSignal(str)
     audio_received_signal = pyqtSignal(object)
+
+    # Recording footprint of the overlay window. Larger than the visible pill:
+    # the extra ~28px on every side is transparent margin that lets the pill's
+    # drop shadow fade out fully instead of being clipped into a hard rectangle.
+    _REC_W, _REC_H = 376, 124
 
     def __init__(self):
         super().__init__()
         self._state = "idle"
+        self._loaded = False
         self._setup_window()
         self._setup_ui()
 
@@ -36,82 +52,71 @@ class FloatingBubble(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-
-        # Initial size (collapsed)
-        self.setFixedSize(60, 60)
+        self.setFixedSize(self._REC_W, self._REC_H)
 
     def _setup_ui(self):
-        """Create UI components."""
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(5, 5, 5, 5)
+        """Create the transparent web view and load the overlay page."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        # Waveform (hidden initially)
-        self.waveform = WaveformWidget(bar_count=20, parent=self)
-        self.waveform.hide()
-        self.layout.addWidget(self.waveform)
+        self.view = QWebEngineView(self)
+        self.view.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.view.setStyleSheet("background: transparent;")
+        self.view.page().setBackgroundColor(QColor(Qt.GlobalColor.transparent))
+        self.view.loadFinished.connect(self._on_load_finished)
+        # Load immediately at startup so it's ready before the first recording.
+        self.view.setUrl(QUrl.fromLocalFile(_OVERLAY_HTML))
+        layout.addWidget(self.view)
 
-    def paintEvent(self, event):
-        """Draw rounded background."""
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    # -- web bridge ---------------------------------------------------------
+    def _on_load_finished(self, ok: bool):
+        self._loaded = bool(ok)
+        if not ok:
+            logger.warning("Overlay page failed to load: %s", _OVERLAY_HTML)
+            return
+        # Sync the page to whatever state we're already in.
+        self._set_web_state(self._state)
 
-        # Rounded rectangle background
-        path = QPainterPath()
-        path.addRoundedRect(0, 0, self.width(), self.height(), 15, 15)
+    def _js(self, code: str):
+        if self._loaded:
+            self.view.page().runJavaScript(code)
 
-        # Color based on state
-        if self._state == "recording":
-            color = QColor(220, 53, 69, 230)  # Red
-        elif self._state == "processing":
-            color = QColor(255, 193, 7, 230)  # Yellow/Amber
-        else:
-            color = QColor(40, 40, 40, 200)  # Dark gray
+    def _set_web_state(self, state: str):
+        palette = state if state in ("recording", "processing") else "recording"
+        self._js(f"window.setState && window.setState('{palette}');")
 
-        painter.fillPath(path, QBrush(color))
-
+    # -- slots (run on the GUI thread) -------------------------------------
     def _on_state_changed(self, state: str):
         """Handle state change (thread-safe via signal)."""
         self._state = state
 
         if state == "recording":
-            # Expand and show waveform
-            self.setFixedSize(260, 70)
-            self.waveform.show()
+            self._set_web_state("recording")
             self.position_bottom_center()
             if not self.isVisible():
                 self.show()
         elif state == "processing":
-            # Keep expanded, change color
-            pass
+            self._set_web_state("processing")
         else:
-            # Collapse and hide
-            self.setFixedSize(60, 60)
-            self.waveform.hide()
+            # Idle: hide the overlay.
             self.hide()
 
-        self.update()
-
     def _on_audio_received(self, audio_chunk):
-        """Update waveform with audio (thread-safe via signal)."""
-        if self._state == "recording":
-            self.waveform.update_amplitudes(audio_chunk)
+        """Push an audio level into the waveform (thread-safe via signal)."""
+        if self._state != "recording" or audio_chunk is None or len(audio_chunk) == 0:
+            return
+        samples = np.asarray(audio_chunk, dtype=np.float32)
+        rms = float(np.sqrt(np.mean(samples ** 2)))
+        level = min(1.0, rms * 8.0)
+        self._js(f"window.setLevel && window.setLevel({level:.3f});")
 
+    # -- public API (unchanged) --------------------------------------------
     def set_state(self, state: str):
-        """
-        Change bubble state.
-
-        Args:
-            state: "idle", "recording", or "processing"
-        """
+        """Change bubble state: 'idle', 'recording', or 'processing'."""
         self.state_changed_signal.emit(state)
 
     def update_audio(self, audio_chunk):
-        """
-        Update waveform visualization.
-
-        Args:
-            audio_chunk: Audio data array
-        """
+        """Update waveform visualization with an audio chunk."""
         self.audio_received_signal.emit(audio_chunk)
 
     def position_bottom_center(self):
@@ -120,5 +125,5 @@ class FloatingBubble(QWidget):
         if screen:
             geom = screen.geometry()
             x = (geom.width() - self.width()) // 2
-            y = geom.height() - self.height() - 50  # 50px from bottom
+            y = geom.height() - self.height() - 60  # 60px from bottom
             self.move(x, y)
