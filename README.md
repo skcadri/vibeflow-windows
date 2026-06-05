@@ -1,3 +1,5 @@
+https://github.com/user-attachments/assets/10766b5d-ccea-4167-aa57-b769163e78f9
+
 # 🎙️ VibeFlow — Windows Voice Dictation
 
 <img width="420" height="111" alt="image" src="https://github.com/user-attachments/assets/3b10fa7e-f3a5-4abc-ac25-c0e48b8eaf9d" />
@@ -47,7 +49,7 @@ Notes: it's a GPU/CPU ONNX app — no separate CUDA/PyTorch install is needed.
 The model downloads to the HuggingFace cache on first run. If onnxruntime-gpu
 fails on a machine with no NVIDIA GPU, install "onnx-asr[hub]" instead.
 ```
-https://github.com/user-attachments/assets/10766b5d-ccea-4167-aa57-b769163e78f9
+
 ---
 
 ## ✨ Features
