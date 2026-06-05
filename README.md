@@ -1,5 +1,7 @@
 # 🎙️ VibeFlow — Windows Voice Dictation
 
+<img width="420" height="111" alt="image" src="https://github.com/user-attachments/assets/3b10fa7e-f3a5-4abc-ac25-c0e48b8eaf9d" />
+
 A fast, local, **Windows** voice-dictation app (a Wispr Flow–style tool). Hold a
 hotkey, talk, and your words are transcribed on-device and pasted at your cursor
 in any application. Speech-to-text runs **fully offline** using
